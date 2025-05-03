@@ -1,0 +1,37 @@
+from pyspark.sql import SparkSession
+from pyspark.sql.functions import col, avg, count, hour
+
+# Step 1: Initialize Spark session
+spark = SparkSession.builder \
+    .appName("NYC Taxi Big Data Analysis") \
+    .getOrCreate()
+
+# Step 2: Load dataset (replace with your path or cloud storage)
+file_path = "yellow_tripdata_2023-01.csv"
+df = spark.read.option("header", "true").csv(file_path, inferSchema=True)
+
+# Step 3: Basic cleaning
+df_clean = df.dropna(subset=["tpep_pickup_datetime", "tpep_dropoff_datetime", "passenger_count", "trip_distance", "total_amount"])
+
+# Step 4: Feature engineering: Extract hour of day
+df_clean = df_clean.withColumn("pickup_hour", hour("tpep_pickup_datetime"))
+
+# Step 5: Aggregate insights
+# A) Average trip distance and total amount per hour
+hourly_stats = df_clean.groupBy("pickup_hour").agg(
+    avg("trip_distance").alias("avg_trip_distance"),
+    avg("total_amount").alias("avg_total_amount"),
+    count("*").alias("trip_count")
+).orderBy("pickup_hour")
+
+hourly_stats.show()
+
+# B) Most common passenger count
+passenger_stats = df_clean.groupBy("passenger_count").count().orderBy(col("count").desc())
+passenger_stats.show()
+
+# Step 6: Save result
+hourly_stats.coalesce(1).write.option("header", "true").csv("output/hourly_stats")
+
+# Stop Spark
+spark.stop()
